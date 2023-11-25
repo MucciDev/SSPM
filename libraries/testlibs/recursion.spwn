@@ -1,0 +1,4 @@
+recur = () {
+    /* code */
+    recur()
+}
