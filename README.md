@@ -47,7 +47,7 @@ sspm import <library-name>
 To import multiple libraries simply do:
 
 ```bash
-sspm import <library-name> <other library-name>
+sspm import <library-name> <other-library-name>
 ```
 
 Replace `<library-name>` with the desired library name for import.
