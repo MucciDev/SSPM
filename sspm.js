@@ -42,41 +42,50 @@ function downloadFileFromGitHub(repoOwner, repoName, filePath) {
     return axios.get(url);
 }
 
-function downloadLibraries(libraryNames, librariesPath) {
-    const spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-    const intervalMap = new Map();
+function downloadLibrary(libraryName, librariesPath) {
+    return new Promise((resolve, reject) => {
+        const libraryFolderPath = path.join(librariesPath, 'libraries', libraryName);
+        if (!fs.existsSync(libraryFolderPath)) {
+            fs.mkdirSync(libraryFolderPath, { recursive: true });
+        }
 
-    libraryNames.forEach((libraryName, index) => {
-        let i = 0;
-        const interval = setInterval(() => {
-            process.stdout.write(`\rDownloading ${spinner[i % spinner.length]} ${libraryName}...`);
-            i++;
-        }, 100);
-        intervalMap.set(libraryName, interval);
-
-        const libraryPath = `${libraryName}.spwn`;
+        const libraryPath = `libraries/${libraryName}`;
         axios.get(BASE_URL)
             .then(response => {
-                const libraries = response.data.filter(item => item.name === libraryPath);
+                const libraries = response.data.filter(item => item.path === libraryPath);
 
                 if (libraries.length > 0) {
                     const library = libraries[0];
-                    return downloadFileFromGitHub('MucciDev', 'SSPM', `libraries/${library.name}`);
+                    return axios.get(library.url);
                 } else {
-                    clearInterval(interval);
                     throw new Error(`Library '${libraryName}' not found.`);
                 }
             })
             .then(response => {
-                clearInterval(intervalMap.get(libraryName));
-                const librariesFolderPath = createLibrariesFolder(librariesPath);
-                const outputPath = path.join(librariesFolderPath, libraryName + '.spwn');
-                fs.writeFileSync(outputPath, response.data);
-                console.log(`\rLibrary '${libraryName}' downloaded and saved at: ${outputPath}`);
+                const libraryFiles = response.data.filter(item => item.name.endsWith('.spwn'));
+
+                if (libraryFiles.length > 0) {
+                    const downloadPromises = libraryFiles.map(file => {
+                        const fileURL = file.download_url;
+                        const fileName = file.name;
+                        return downloadFileFromGitHub('MucciDev', 'SSPM', `${libraryPath}/${fileName}`)
+                            .then(fileData => {
+                                const filePath = path.join(libraryFolderPath, fileName);
+                                fs.writeFileSync(filePath, fileData.data);
+                                console.log(`File '${fileName}' downloaded and saved at: ${filePath}`);
+                            });
+                    });
+
+                    Promise.all(downloadPromises)
+                        .then(() => resolve())
+                        .catch(() => reject());
+                } else {
+                    throw new Error(`No SPWN files found in the '${libraryName}' library.`);
+                }
             })
             .catch(error => {
-                clearInterval(intervalMap.get(libraryName));
                 console.error(error.message);
+                reject();
             });
     });
 }
@@ -129,7 +138,7 @@ function getNewLibraryPath() {
     });
 }
 
-function startLibraryImport(path) {
+function startLibraryImport(librariesPath) {
     rl.question('Enter command: ', (command) => {
         const args = command.split(' ').slice(2);
 
@@ -141,4 +150,18 @@ function startLibraryImport(path) {
 
         rl.close();
     });
+}
+
+function downloadLibraries(libraryNames, librariesPath) {
+    const downloadPromises = libraryNames.map(libraryName => {
+        return downloadLibrary(libraryName, librariesPath);
+    });
+
+    Promise.all(downloadPromises)
+        .then(() => {
+            console.log('All libraries downloaded successfully.');
+        })
+        .catch(() => {
+            console.error('Failed to download one or more libraries.');
+        });
 }
