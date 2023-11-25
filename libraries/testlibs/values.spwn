@@ -1,0 +1,13 @@
+num = 10
+
+text = "Hello, I'm a string!"
+
+array = [1, 2, 3]
+
+boolean = true
+
+dictionary = {
+    a: 1,
+    b: 2,
+    c: 3
+}
