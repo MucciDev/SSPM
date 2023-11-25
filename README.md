@@ -2,7 +2,7 @@
 
 # Simple SPWN Package Manager (SSPM)
 
-SSPM is a command-line tool built in Node.js specifically designed for simplifying the import and management of SPWN libraries. It streamlines the process of accessing libraries directly from the [MucciDev/SSPM](https://github.com/MucciDev/SSPM/libraries) repository.
+SSPM is a command-line tool built in Node.js specifically designed for simplifying the import and management of SPWN libraries. It streamlines the process of accessing libraries directly from the [MucciDev/SSPM/libraries](https://github.com/MucciDev/SSPM/tree/main/libraries) repository.
 
 ## Features
 
