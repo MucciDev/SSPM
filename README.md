@@ -1,42 +1,60 @@
+---
+
 # Simple SPWN Package Manager (SSPM)
 
-SSPM is a command-line tool built in Node.js to facilitate the easy import and management of SPWN libraries from the [MucciDev/SSPM](https://github.com/MucciDev/SSPM) repository.
+SSPM is a command-line tool built in Node.js specifically designed for simplifying the import and management of SPWN libraries. It streamlines the process of accessing libraries directly from the [MucciDev/SSPM](https://github.com/MucciDev/SSPM/libraries) repository.
 
 ## Features
 
-- **Import Libraries**: Download and import SPWN libraries directly from the SSPM repository.
-- **Set Custom Path**: Set a custom path for downloading and storing libraries.
-- **Command-line Interface**: User-friendly CLI for managing library imports.
+- **Library Import**: Seamlessly download and import SPWN libraries from the SSPM repository.
+- **Custom Path Configuration**: Easily set a personalized path for efficient library storage.
+- **User-friendly CLI**: Intuitive command-line interface for convenient library management.
+- **Configurable Library Storage**: Ability to store and organize downloaded libraries with ease.
+- **Interactive Library Importing**: Select and import multiple libraries interactively.
+- **Real-time Progress Tracking**: Display of live download progress for imported libraries.
+- **Error Handling**: Robust error handling for library retrieval and import processes.
 
 ## Installation
 
 1. Clone or download the repository to your local machine.
-2. Install the required dependencies by running `npm install`.
-3. Use `node sspm.js -s path <custom-path>` to set a custom path for library storage.
+2. Install the required dependencies by executing `npm install`.
+3. Use `node sspm.js -s path <custom-path>` to set a personalized path for library storage.
 
 ## Usage
 
 ### Setting a Custom Path
 
-To set a custom path for library storage, use the following command:
+When first initialized it will ask to establish a custom path for library storage:
 
+```bash
+Enter path for libraries folder: <path>
 ```
-node sspm.js -s path <custom-path>
+
+After the first time it will prompt the user every time with:
+
+```bash
+Use the last used path 'path'? (y/n):
 ```
 
 ### Importing Libraries
 
-To import a library, use the following command:
+To import a library, utilize the following command:
 
-```
+```bash
 sspm import <library-name>
 ```
 
-Replace `<library-name>` with the name of the library you want to import.
+To import multiple libraries simply do:
+
+```bash
+sspm import <library-name> <other library-name>
+```
+
+Replace `<library-name>` with the desired library name for import.
 
 ### Example:
 
-```
+```bash
 sspm import myLibrary
 ```
 
@@ -46,6 +64,6 @@ The tool stores the last used path for library storage in a `config.json` file w
 
 ## Contributions
 
-Contributions and suggestions are welcome! Feel free to open an issue or pull request to propose changes or report any bugs.
+Contributions and suggestions are encouraged! Please feel free to open issues or pull requests to propose changes or report any encountered bugs.
 
 ---
