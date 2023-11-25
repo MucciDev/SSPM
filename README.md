@@ -49,5 +49,3 @@ The tool stores the last used path for library storage in a `config.json` file w
 Contributions and suggestions are welcome! Feel free to open an issue or pull request to propose changes or report any bugs.
 
 ---
-
-You can structure this documentation in a README.md file within the repository to provide users with information on installation, usage, features, and contribution guidelines. Adjust the content based on the specifics of your SSPM tool.
