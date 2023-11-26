@@ -57,7 +57,7 @@ async function downloadLibraryFile(libraryPath, librariesPath, file) {
         await fs.writeFile(filePath, fileData);
         console.log(`File '${file.name}' downloaded and saved at: ${filePath}`);
     } catch (error) {
-        throw new Error(`Error downloading file: ${error.message}`);
+        console.error(`Error downloading file: ${error.message}`);
     }
 }
 
@@ -76,6 +76,7 @@ async function downloadLibrary(libraryName, librariesPath) {
             if (libraryFiles.length > 0) {
                 spinnerInterval = displaySpinner(`Downloading ${libraryName}...`);
 
+                // Parallelize file downloads
                 await Promise.all(libraryFiles.map(file =>
                     downloadLibraryFile(libraryPath, librariesPath, file)
                 ));
