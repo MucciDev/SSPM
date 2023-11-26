@@ -19,7 +19,7 @@ async function saveConfig(configData) {
         await fs.mkdir(CONFIG_FOLDER, { recursive: true });
         await fs.writeFile(CONFIG_FILE, JSON.stringify(configData));
     } catch (err) {
-        console.error(err);
+        throw new Error(`Error saving config: ${err.message}`);
     }
 }
 
@@ -28,7 +28,7 @@ async function loadConfig() {
         const data = await fs.readFile(CONFIG_FILE, 'utf8');
         return JSON.parse(data);
     } catch (err) {
-        return {};
+        throw new Error(`Error loading config: ${err.message}`);
     }
 }
 
@@ -42,12 +42,28 @@ async function downloadFileFromGitHub(repoOwner, repoName, filePath) {
     }
 }
 
+function displaySpinner(message) {
+    let i = 0;
+    return setInterval(() => {
+        process.stdout.write(`\r${message} ${spinner[i % spinner.length]}`);
+        i++;
+    }, 100);
+}
+
+async function downloadLibraryFile(libraryPath, librariesPath, file) {
+    try {
+        const fileData = await downloadFileFromGitHub('MucciDev', 'SSPM', `${libraryPath}/${file.name}`);
+        const filePath = path.join(librariesPath, 'libraries', libraryPath, file.name);
+        await fs.writeFile(filePath, fileData);
+        console.log(`File '${file.name}' downloaded and saved at: ${filePath}`);
+    } catch (error) {
+        throw new Error(`Error downloading file: ${error.message}`);
+    }
+}
+
 async function downloadLibrary(libraryName, librariesPath) {
     let spinnerInterval;
     try {
-        const libraryFolderPath = path.join(librariesPath, 'libraries', libraryName);
-        await fs.mkdir(libraryFolderPath, { recursive: true });
-
         const libraryPath = `libraries/${libraryName}`;
         const response = await axios.get(BASE_URL);
         const libraries = response.data.filter(item => item.path === libraryPath);
@@ -58,18 +74,11 @@ async function downloadLibrary(libraryName, librariesPath) {
             const libraryFiles = libraryData.data.filter(item => item.name.endsWith('.spwn'));
 
             if (libraryFiles.length > 0) {
-                let i = 0;
-                spinnerInterval = setInterval(() => {
-                    process.stdout.write(`\rDownloading ${spinner[i % spinner.length]} ${libraryName}...`);
-                    i++;
-                }, 100);
+                spinnerInterval = displaySpinner(`Downloading ${libraryName}...`);
 
-                await Promise.all(libraryFiles.map(async file => {
-                    const fileData = await downloadFileFromGitHub('MucciDev', 'SSPM', `${libraryPath}/${file.name}`);
-                    const filePath = path.join(libraryFolderPath, file.name);
-                    await fs.writeFile(filePath, fileData);
-                    console.log(`\rFile '${file.name}' downloaded and saved at: ${filePath}`);
-                }));
+                await Promise.all(libraryFiles.map(file =>
+                    downloadLibraryFile(libraryPath, librariesPath, file)
+                ));
 
                 clearInterval(spinnerInterval);
                 process.stdout.write('\r'); // Clear the spinner animation
@@ -83,6 +92,7 @@ async function downloadLibrary(libraryName, librariesPath) {
         console.error(error.message);
         clearInterval(spinnerInterval);
         process.stdout.write('\r'); // Clear the spinner animation on error
+        throw error;
     }
 }
 
@@ -97,47 +107,62 @@ async function start() {
             librariesPath = '';
         }
 
-        if (librariesPath) {
-            rl.question(`Use the last used path '${librariesPath}'? (y/n): `, async (answer) => {
-                if (answer.toLowerCase() === 'y') {
-                    await startLibraryImport(librariesPath);
-                } else {
-                    await getNewLibraryPath();
-                }
-            });
+        if (!librariesPath || !(await confirmUseLastPath(librariesPath))) {
+            librariesPath = await getNewLibraryPath();
+        }
+
+        await startLibraryImport(librariesPath);
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
+async function confirmUseLastPath(librariesPath) {
+    return new Promise(resolve => {
+        rl.question(`Use the last used path '${librariesPath}'? (y/n): `, answer => {
+            rl.close();
+            resolve(answer.toLowerCase() === 'y');
+        });
+    });
+}
+
+async function getNewLibraryPath() {
+    return new Promise(resolve => {
+        rl.question('Enter new library path: ', async answer => {
+            rl.close();
+            resolve(answer.trim());
+        });
+    });
+}
+
+async function startLibraryImport(librariesPath) {
+    try {
+        const command = await getCommand();
+        const args = command.split(' ').slice(2);
+
+        if (command.startsWith('sspm import') && args.length > 0) {
+            await downloadLibraries(args, librariesPath);
         } else {
-            await getNewLibraryPath();
+            console.log('Invalid command!');
         }
     } catch (error) {
         console.error(error.message);
     }
 }
 
-async function startLibraryImport(librariesPath) {
-    try {
-        rl.question('Enter command: ', async (command) => {
-            const args = command.split(' ').slice(2);
-
-            if (command.startsWith('sspm import') && args.length > 0) {
-                await downloadLibraries(args, librariesPath);
-            } else {
-                console.log('Invalid command!');
-            }
-
-            rl.close();
+async function getCommand() {
+    return new Promise(resolve => {
+        rl.question('Enter command: ', async command => {
+            resolve(command);
         });
-    } catch (error) {
-        console.error(error.message);
-    }
+    });
 }
 
 async function downloadLibraries(libraryNames, librariesPath) {
     try {
-        const downloadPromises = libraryNames.map(libraryName => {
-            return downloadLibrary(libraryName, librariesPath);
-        });
-
-        await Promise.all(downloadPromises);
+        await Promise.all(libraryNames.map(libraryName =>
+            downloadLibrary(libraryName, librariesPath)
+        ));
         console.log('All libraries downloaded successfully.');
     } catch (error) {
         console.error('Failed to download one or more libraries.');
