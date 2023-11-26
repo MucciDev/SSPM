@@ -1,0 +1,84 @@
+extract obj_props
+
+type @LRCS
+impl @LRCS {
+    new: #[
+        constructor,
+        desc("Creates a new LRCS from the provided file")
+        example("@LRCS::new('file.lrcs')")
+    ] (
+        file: @string,
+        distance: @number = 30*100
+    ){
+        content = $.readfile(file)
+
+        lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+
+        timestamps = lines.map(
+            l => l.split('|').map(s => s.trim())
+        ).map(
+            t => [@LRCS::time_string(t[0]),t[1].replace(r"\\n",'\n')]
+        )
+
+        return @LRCS::{
+            timestamps: timestamps.map(t => t[0]),
+            lyrics: timestamps.map(l => l[1]),
+            distance: distance,
+        }
+    },
+    time_string: (timestamp: @string){
+        // this will force the timestamp to be in the format of 00:00:00.000
+        array = timestamp.replace('[:.]','_').split('_')
+
+        time_map = [1, 1000, 60, 60, 24, 365]
+
+        let index = 0
+        ms = array.reverse().reduce((c,v){
+            output = c + @number(v) * time_map[0:index+1].reduce((c,v) => c * v, 1)
+            index += 1
+            return output
+        })
+
+        return ms
+    },
+    spawn: #[
+        desc("Spawn the lyrics objects and returns a group controlling them")
+        example(u"
+            extract obj_props
+
+            my_lyrics = @LRCS::new('file.lrcs')
+            my_group = my_lyrics.spawn()
+
+            my_group = my_lyrics.spawn(text_object =>
+                text_object.with(SCALING, 0.5)
+            )
+        ")
+    ] (
+        self,
+        map: (@object) -> @object = x => x
+    ){
+        group = ?g
+
+        lower = !{
+            group.move(0, -self.distance/3)
+        }
+
+        for index in 0..self.lyrics.length {
+            lyric = self.lyrics[index]
+            timestamp = self.timestamps[index]
+
+            -> !{
+                wait(timestamp/1000)
+                lower!
+            }!
+
+            if lyric.length == 0 { continue }
+
+            map(
+                lyric.to_obj().with(X, 0).with(Y, (index+1) * self.distance).with(GROUPS, group)
+            ).add()
+        }
+
+        return group
+    },
+}
