@@ -6,29 +6,80 @@ const { program } = require('commander');
 
 const CONFIG_FOLDER = './config';
 const CONFIG_FILE = path.join(CONFIG_FOLDER, 'config.json');
+const LIBRARIES_FOLDER = './libraries';
 const BASE_URL = 'https://api.github.com/repos/MucciDev/SSPM/contents/libraries';
-const spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+//(old spinner animation) const spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']; 
+const spinner = ['-', '\\', '|', '/'];
 
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
 
-async function saveConfig(configData) {
+async function createFolderIfNotExists(folderPath) {
     try {
-        await fs.mkdir(CONFIG_FOLDER, { recursive: true });
-        await fs.writeFile(CONFIG_FILE, JSON.stringify(configData));
+        await fs.access(folderPath);
     } catch (err) {
-        throw new Error(`Error saving config: ${err.message}`);
+        try {
+            await fs.mkdir(folderPath, { recursive: true });
+        } catch (mkdirErr) {
+            throw new Error(`Error creating folder ${folderPath}: ${mkdirErr.message}`);
+        }
     }
 }
 
+// Wrap all asynchronous functions with error handling to ensure proper error messages are logged or thrown
+async function initializeFolders() {
+    try {
+        await createFolderIfNotExists(CONFIG_FOLDER);
+        await createFolderIfNotExists(LIBRARIES_FOLDER);
+    } catch (err) {
+        console.error('Error initializing folders:', err.message);
+        throw err;
+    }
+}
+
+// Add better error handling for file operations
+async function createConfigFileWithData(lastPath) {
+    const configData = { lastPath };
+    try {
+        await initializeFolders();
+        await fs.writeFile(CONFIG_FILE, JSON.stringify(configData));
+    } catch (err) {
+        console.error('Error creating config file:', err.message);
+        throw err;
+    }
+}
+
+// Wrap file operations in better try-catch blocks
+async function saveConfig(configData) {
+    try {
+        await initializeFolders();
+        await fs.writeFile(CONFIG_FILE, JSON.stringify(configData));
+    } catch (err) {
+        console.error('Error saving config:', err.message);
+        throw err;
+    }
+}
+
+// Wrap file read operations in better try-catch blocks
 async function loadConfig() {
     try {
+        await initializeFolders();
+        const configFileExists = await fs.access(CONFIG_FILE).then(() => true).catch(() => false);
+        
+        if (!configFileExists) {
+            console.log("Config file doesn't exist. Initializing...");
+            const lastPath = await getNewLibraryPath();
+            await createConfigFileWithData(lastPath);
+            return { lastPath };
+        }
+
         const data = await fs.readFile(CONFIG_FILE, 'utf8');
         return JSON.parse(data);
     } catch (err) {
-        throw new Error(`Error loading config: ${err.message}`);
+        console.error('Error reading config file:', err.message);
+        return {};
     }
 }
 
@@ -53,7 +104,8 @@ function displaySpinner(message) {
 async function downloadLibraryFile(libraryPath, librariesPath, file) {
     try {
         const fileData = await downloadFileFromGitHub('MucciDev', 'SSPM', `${libraryPath}/${file.name}`);
-        const filePath = path.join(librariesPath, 'libraries', libraryPath, file.name);
+        const filePath = path.join(librariesPath, libraryPath, file.name); // Fix file path here
+        await fs.mkdir(path.dirname(filePath), { recursive: true }); // Ensure directory exists
         await fs.writeFile(filePath, fileData);
         console.log(`File '${file.name}' downloaded and saved at: ${filePath}`);
     } catch (error) {
@@ -61,66 +113,59 @@ async function downloadLibraryFile(libraryPath, librariesPath, file) {
     }
 }
 
-async function downloadLibrary(libraryName, librariesPath) {
-    let spinnerInterval;
-    try {
-        const libraryPath = `libraries/${libraryName}`;
-        const response = await axios.get(BASE_URL);
-        const libraries = response.data.filter(item => item.path === libraryPath);
+async function downloadLibraries(libraryNames, librariesPath) {
+    let spinnerInterval = displaySpinner('Downloading libraries');
 
-        if (libraries.length > 0) {
-            const library = libraries[0];
+    try {
+        const libraries = await getLibraryData(); // Fetch library data only once
+
+        await Promise.all(libraryNames.map(async libraryName => {
+            const libraryPath = `libraries/${libraryName}`;
+            const library = libraries.find(item => item.path === libraryPath);
+
+            if (!library) {
+                throw new Error(`Library '${libraryName}' not found.`);
+            }
+
             const libraryData = await axios.get(library.url);
             const libraryFiles = libraryData.data.filter(item => item.name.endsWith('.spwn'));
 
-            if (libraryFiles.length > 0) {
-                spinnerInterval = displaySpinner(`Downloading ${libraryName}...`);
-
-                await Promise.all(libraryFiles.map(file =>
-                    downloadLibraryFile(libraryPath, librariesPath, file)
-                ));
-
-                clearInterval(spinnerInterval);
-                process.stdout.write('\r'); // Clear the spinner animation
-            } else {
+            if (libraryFiles.length === 0) {
                 throw new Error(`No SPWN files found in the '${libraryName}' library.`);
             }
-        } else {
-            throw new Error(`Library '${libraryName}' not found.`);
-        }
+
+            clearInterval(spinnerInterval); // Clear spinner before logging file downloads
+            console.log(`${spinner[spinner.length - 1]} Downloading ${libraryName}...`);
+
+            // Parallel downloads using Promise.all
+            await Promise.all(libraryFiles.map(file =>
+                downloadLibraryFile(libraryPath, librariesPath, file)
+            ));
+
+            console.log(`All files downloaded for ${libraryName}`);
+            spinnerInterval = displaySpinner('Downloading libraries'); // Restart spinner
+        }));
+
+        clearInterval(spinnerInterval); // Clear spinner after all downloads complete
+        console.log('All libraries downloaded successfully.');
     } catch (error) {
-        console.error(error.message);
-        clearInterval(spinnerInterval);
-        process.stdout.write('\r'); // Clear the spinner animation on error
-        throw error;
+        clearInterval(spinnerInterval); // Clear spinner in case of an error
+        console.error('Failed to download one or more libraries:', error.message);
     }
 }
 
-async function start() {
+async function getLibraryData() {
     try {
-        const config = await loadConfig();
-        let librariesPath = config.lastPath || '';
-
-        try {
-            await fs.access(librariesPath);
-        } catch (err) {
-            librariesPath = '';
-        }
-
-        if (!librariesPath || !(await confirmUseLastPath(librariesPath))) {
-            librariesPath = await getNewLibraryPath();
-        }
-
-        await startLibraryImport(librariesPath);
+        const response = await axios.get(BASE_URL);
+        return response.data;
     } catch (error) {
-        console.error(error.message);
+        throw new Error(`Failed to fetch library data from GitHub: ${error.message}`);
     }
 }
 
 async function confirmUseLastPath(librariesPath) {
     return new Promise(resolve => {
         rl.question(`Use the last used path '${librariesPath}'? (y/n): `, answer => {
-            rl.close();
             resolve(answer.toLowerCase() === 'y');
         });
     });
@@ -129,10 +174,32 @@ async function confirmUseLastPath(librariesPath) {
 async function getNewLibraryPath() {
     return new Promise(resolve => {
         rl.question('Enter new library path: ', async answer => {
-            rl.close();
             resolve(answer.trim());
         });
     });
+}
+
+// Modified start function to handle user input
+async function start() {
+    try {
+        const config = await loadConfig();
+        let librariesPath = config.lastPath || '';
+
+        let useLastPath = false;
+
+        if (librariesPath) {
+            useLastPath = await confirmUseLastPath(librariesPath);
+        }
+
+        if (!useLastPath) {
+            librariesPath = await getNewLibraryPath();
+            await createConfigFileWithData(librariesPath);
+        }
+
+        await startLibraryImport(librariesPath);
+    } catch (error) {
+        console.error(error.message);
+    }
 }
 
 async function startLibraryImport(librariesPath) {
@@ -156,17 +223,6 @@ async function getCommand() {
             resolve(command);
         });
     });
-}
-
-async function downloadLibraries(libraryNames, librariesPath) {
-    try {
-        await Promise.all(libraryNames.map(libraryName =>
-            downloadLibrary(libraryName, librariesPath)
-        ));
-        console.log('All libraries downloaded successfully.');
-    } catch (error) {
-        console.error('Failed to download one or more libraries.');
-    }
 }
 
 // Start the program
